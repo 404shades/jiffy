@@ -11,10 +11,10 @@ import 'package:jiffy/src/utils/regex.dart';
 import 'package:jiffy/src/utils/replace.dart';
 
 class Jiffy {
-  DateTime _dateTime;
+  late DateTime _dateTime;
   DateTime get dateTime => _dateTime;
 
-  Jiffy([var input, String pattern]) {
+  Jiffy([var input, String? pattern]) {
     _dateTime = _parse(input, pattern);
   }
 
@@ -29,7 +29,11 @@ class Jiffy {
     _dateTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
   }
 
-  DateTime _parse(var input, [String pattern]) {
+  Jiffy clone() {
+    return Jiffy(this);
+  }
+
+  DateTime _parse(var input, [String? pattern]) {
     var dateTime;
     if (input == null && pattern == null) {
       dateTime = DateTime.now();
@@ -49,12 +53,27 @@ class Jiffy {
                 input['years'] ??
                 input['y'] ??
                 DateTime.now().year,
-            input['month'] ?? input['months'] ?? input['M'] ?? 1,
-            input['day'] ?? input['days'] ?? input['d'] ?? 1,
-            input['hour'] ?? input['hours'] ?? input['h'] ?? 0,
-            input['minute'] ?? input['minutes'] ?? input['m'] ?? 0,
-            input['second'] ?? input['seconds'] ?? input['s'] ?? 0,
-            input['millisecond'] ?? input['milliseconds'] ?? input['ms'] ?? 0);
+            input['month'] ??
+                input['months'] ??
+                input['M'] ??
+                DateTime.now().month,
+            input['day'] ?? input['days'] ?? input['d'] ?? DateTime.now().day,
+            input['hour'] ??
+                input['hours'] ??
+                input['h'] ??
+                DateTime.now().hour,
+            input['minute'] ??
+                input['minutes'] ??
+                input['m'] ??
+                DateTime.now().minute,
+            input['second'] ??
+                input['seconds'] ??
+                input['s'] ??
+                DateTime.now().second,
+            input['millisecond'] ??
+                input['milliseconds'] ??
+                input['ms'] ??
+                DateTime.now().millisecond);
       }
     } else if (input is List) {
       if (input.isEmpty) {
@@ -90,6 +109,10 @@ class Jiffy {
                 'Date time not recognized, a pattern must be passed, e.g. Jiffy("12, Oct", "dd, MMM")')
             .cause;
       }
+    } else {
+      throw JiffyException(
+              'Jiffy only accepts String, List, Map, DateTime or Jiffy itself as parameters')
+          .cause;
     }
     return dateTime;
   }
@@ -110,17 +133,19 @@ class Jiffy {
     'arkw',
     'arsa',
     'ptbr',
-    'sv'
+    'sv',
+    'nb',
   ];
 
   static const _saturdayStartOfWeek = [
     'ar',
     'arly',
     'arma',
+    'fa',
   ];
 
   static String _defaultLocale = 'en';
-  static Future<String> locale([String locale]) async {
+  static Future<String> locale([String? locale]) async {
     if (locale != null) {
       await initializeDateFormatting();
       Intl.defaultLocale = locale;
@@ -130,8 +155,8 @@ class Jiffy {
   }
 
 //  GET
-  int get milliseconds => _dateTime.millisecond;
-  int get seconds => _dateTime.second;
+  int get millisecond => _dateTime.millisecond;
+  int get second => _dateTime.second;
   int get minute => _dateTime.minute;
   int get hour => _dateTime.hour;
   int get date => _dateTime.day;
@@ -155,7 +180,7 @@ class Jiffy {
   int get year => _dateTime.year;
 
 //  MANIPULATE
-  DateTime add({
+  void add({
     Duration duration = Duration.zero,
     int years = 0,
     int months = 0,
@@ -178,10 +203,9 @@ class Jiffy {
     ));
     _dateTime = _addMonths(_dateTime, months);
     _dateTime = _addMonths(_dateTime, years * 12);
-    return _dateTime;
   }
 
-  DateTime subtract({
+  void subtract({
     Duration duration = Duration.zero,
     int years = 0,
     int months = 0,
@@ -204,10 +228,9 @@ class Jiffy {
     ));
     _dateTime = _addMonths(_dateTime, -months);
     _dateTime = _addMonths(_dateTime, -years * 12);
-    return _dateTime;
   }
 
-  DateTime startOf(Units units) {
+  void startOf(Units units) {
     switch (units) {
       case Units.MILLISECOND:
         _dateTime = DateTime(
@@ -245,10 +268,9 @@ class Jiffy {
         _dateTime = DateTime(_dateTime.year);
         break;
     }
-    return _dateTime;
   }
 
-  DateTime endOf(Units units) {
+  void endOf(Units units) {
     switch (units) {
       case Units.MILLISECOND:
         _dateTime = DateTime(
@@ -293,7 +315,6 @@ class Jiffy {
         _dateTime = DateTime(_dateTime.year, 12, 31, 23, 59, 59, 999);
         break;
     }
-    return _dateTime;
   }
 
   DateTime local() {
@@ -346,7 +367,7 @@ class Jiffy {
   }
 
 //  DISPLAY
-  String format([String pattern]) {
+  String format([String? pattern]) {
     if (pattern == null) return _dateTime.toIso8601String();
     final suffix = _getOrdinalDates(_dateTime.day);
     final escaped = replaceEscapePattern(pattern);
@@ -355,10 +376,8 @@ class Jiffy {
   }
 
   String _getOrdinalDates(int day) {
-    if (!localeOrdinals.contains(replaceLocaleHyphen(_defaultLocale))) {
-      return '';
-    }
-    final ordinals = getOrdinalLocaleDates(replaceLocaleHyphen(_defaultLocale));
+    var ordinals = getOrdinalLocaleDates(replaceLocaleHyphen(_defaultLocale));
+    if (ordinals == null) return '';
     var suffix = ordinals[0];
     final digit = day % 10;
     if ((digit > 0 && digit < 4) && (day < 11 || day > 13)) {
@@ -414,24 +433,28 @@ class Jiffy {
   num diff(var input, [Units units = Units.MILLISECOND, bool asFloat = false]) {
     var dateTime = _parse(input);
     num diff;
+
+    var dt1 = _dateTime.millisecondsSinceEpoch;
+    var dt2 = dateTime.millisecondsSinceEpoch;
+
     switch (units) {
       case Units.MILLISECOND:
-        diff = _dateTime.difference(dateTime).inMilliseconds;
+        diff = dt1 - dt2;
         break;
       case Units.SECOND:
-        diff = _dateTime.difference(dateTime).inSeconds;
+        diff = (dt1 - dt2) / Duration.millisecondsPerSecond;
         break;
       case Units.MINUTE:
-        diff = _dateTime.difference(dateTime).inMinutes;
+        diff = (dt1 - dt2) / Duration.millisecondsPerMinute;
         break;
       case Units.HOUR:
-        diff = _dateTime.difference(dateTime).inHours;
+        diff = (dt1 - dt2) / Duration.millisecondsPerHour;
         break;
       case Units.DAY:
-        diff = _dateTime.difference(dateTime).inDays;
+        diff = (dt1 - dt2) / Duration.millisecondsPerDay;
         break;
       case Units.WEEK:
-        diff = _dateTime.difference(dateTime).inDays / 7;
+        diff = ((dt1 - dt2) / Duration.millisecondsPerDay) / 7;
         break;
       case Units.MONTH:
         diff = _monthDiff(_dateTime, dateTime);
@@ -459,12 +482,12 @@ class Jiffy {
       adjust = (b.millisecondsSinceEpoch - anchor.millisecondsSinceEpoch) /
           (anchor2.millisecondsSinceEpoch - anchor.millisecondsSinceEpoch);
     }
-    return -(wholeMonthDiff + adjust) ?? 0;
+    return -(wholeMonthDiff + adjust);
   }
 
   int _absFloor(num number) {
     if (number < 0) {
-      return number.ceil() ?? 0;
+      return number.ceil();
     } else {
       return number.floor();
     }
@@ -484,8 +507,8 @@ class Jiffy {
     if (units == Units.MILLISECOND) {
       return valueOf() < dateTime.millisecondsSinceEpoch;
     }
-    endOf(units);
-    return valueOf() < dateTime.millisecondsSinceEpoch;
+    var endOfMs = (clone()..endOf(units)).valueOf();
+    return endOfMs < dateTime.millisecondsSinceEpoch;
   }
 
   bool isAfter(var input, [Units units = Units.MILLISECOND]) {
@@ -493,8 +516,8 @@ class Jiffy {
     if (units == Units.MILLISECOND) {
       return valueOf() > dateTime.millisecondsSinceEpoch;
     }
-    startOf(units);
-    return dateTime.millisecondsSinceEpoch < valueOf();
+    var startOfMs = (clone()..startOf(units)).valueOf();
+    return dateTime.millisecondsSinceEpoch < startOfMs;
   }
 
   bool isSame(var input, [Units units = Units.MILLISECOND]) {
@@ -502,9 +525,10 @@ class Jiffy {
     if (units == Units.MILLISECOND) {
       return valueOf() == dateTime.millisecondsSinceEpoch;
     }
-    var jiffyMs = dateTime.millisecondsSinceEpoch;
-    return startOf(units).millisecondsSinceEpoch <= jiffyMs &&
-        jiffyMs <= endOf(units).millisecondsSinceEpoch;
+    var startOfMs = (clone()..startOf(units)).valueOf();
+    var endOfMs = (clone()..endOf(units)).valueOf();
+    var dateTimeMs = dateTime.millisecondsSinceEpoch;
+    return startOfMs <= dateTimeMs && dateTimeMs <= endOfMs;
   }
 
   bool isSameOrBefore(var input, [Units units = Units.MILLISECOND]) {
